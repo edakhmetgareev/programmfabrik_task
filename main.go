@@ -13,7 +13,7 @@ import (
 
 type TagInfo struct {
 	XMLName xml.Name `xml:"taginfo"`
-	Table   Table    `xml:"table"`
+	Tables  []Table  `xml:"table"`
 }
 
 type Table struct {
@@ -72,7 +72,7 @@ func getTagData(tag Tag, tableName string) map[string]interface{} {
 	tagData := map[string]interface{}{
 		"writable":    tag.Writable == "true",
 		"path":        tagPath,
-		"group":       tag.ID,
+		"group":       tableName,
 		"description": tagDescription,
 		"type":        tag.Type,
 	}
@@ -99,7 +99,11 @@ func handleTags(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	encoder := json.NewEncoder(w)
 
-	tagChan := make(chan map[string]interface{}, len(tagInfo.Table.Tags))
+	var chanSize int64
+	for _, table := range tagInfo.Tables {
+		chanSize += int64(len(table.Tags))
+	}
+	tagChan := make(chan map[string]interface{}, chanSize)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -111,9 +115,11 @@ func handleTags(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	// Send tag data to the channel
-	for _, tag := range tagInfo.Table.Tags {
-		tagData := getTagData(tag, tagInfo.Table.Name)
-		tagChan <- tagData
+	for _, table := range tagInfo.Tables {
+		for _, tag := range table.Tags {
+			tagData := getTagData(tag, table.Name)
+			tagChan <- tagData
+		}
 	}
 	close(tagChan)
 
